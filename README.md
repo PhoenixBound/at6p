@@ -12,7 +12,7 @@ able to find them [here](https://github.com/PsyCommando/ppmdu_2).
 The only thing AT6P shares with its predecessors is a kind of similar header format:
 
 |Offset (hex)|Size|Purpose|
-||||
+|-|-|-|
 |0|4|Magic (`41 54 36 50`)|
 |4|1|Flag byte. I don't know what it means and it's not essential to decompression.|
 |5|2|Size of the compressed file, stored little-endian|
@@ -41,14 +41,14 @@ use progressively more bits. The decoding process works like this:
 * Excluding the 1 that you just read, read `count` more bits, and store them in a number variable
   called `data`. The first bit should become the least significant bit of `data`; the second bit,
   the next bit greater; etc. in little endian bit order.
-* Add 2\^`count` - 1 to `data`. (x\^y means "x raised to the power of y.")
+* Add (2\^`count`) - 1 to `data`. (x\^y means "x raised to the power of y.")
 * `data` is the decoded version of the bits.
 
 For simplicity for me, the following table will list bits in their
 "numerical" order -- least significant bit on the right, most significant on the left.
 
 |Bit pattern|Exponential-Golomb coding value|Command|
-||||
+|-|-|-|
 |1|0|Add to this byte: +0|
 |010|1|Use previous byte's value|
 |110|2|Add to this byte: +1|
