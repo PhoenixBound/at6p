@@ -49,7 +49,7 @@ For simplicity for me, the following table will list bits in their
 
 |Bit pattern|Exponential-Golomb coding value|Command|
 |-|-|-|
-|1|0|Add to this byte: +0|
+|1|0|Repeat the current byte (i.e., Add to this byte: +0)|
 |010|1|Use previous byte's value|
 |110|2|Add to this byte: +1|
 |00100|3|Add to this byte: -1|
@@ -70,7 +70,7 @@ value. The least significant bit is the sign, and the rest of the bits make up t
 practice, this means you can use the following procedure to transform the second column (`data`)
 into the third column:
 
-* Store the value "(`data` mod 2) \* -1" into a number variable called `sign`. (mod is the
+* Store the value "(`data` mod 2) \* -2 + 1" into a number variable called `sign`. (mod is the
   mathematical "modulo" operation, which will return either 0 or 1 in this case.)
 * Store the value "`data` / 2" into a number variable called `magnitude`. (`/` refers to integer
   division -- the result of division after rounding down to the nearest integer, or truncating
@@ -79,13 +79,28 @@ into the third column:
   command.
 * Otherwise, the command is to add the value "`sign * magnitude`" to the current byte.
 
+Regarding the values of the "previous" and "current" byte, they're kept track of as follows:
+
+* When using the command with sign = 1 and magnitude = 0, the previous byte and current byte
+  are not updated.
+* When using all other commands, including the "use previous byte's value" command, the "current
+  byte" for this step becomes the previous byte for the next step, and the byte outputted by this
+  step becomes the "current byte" for the next step.
+
 These procedures are not necessarily the most efficient ways to read the data, but they should yield
 the same results as the in-game decompression code in 999.
 
 Compression should be relatively simple, you just need to reverse the process. There's very little
-opportunity for creativity in this process. The only places where there's more than one option you
-can take is recognizing when the next byte is the same as the previous byte. You should always
-take that option, because it uses fewer bits and doesn't affect any bytes that follow.
+opportunity for creativity in this process. Wikipedia's page on Exponential-Golomb coding reveals a
+fairly simple method for encoding a non-negative number `d` into 999's format:
+
+* Let `n` = `d` + 1
+* Let `shift` = floor(logbase(2, n))
+* Let `power` = 2\^`shift` -- that is, the greatest power of 2 less than or equal to `n`.
+* Output `power` bit by bit, beginning from the least significant bit, for a total of (`shift` + 1)
+  bits. This will output the appropriate number of 0s and a 1.
+* Output `n` mod `power` -- that is, `n` without its most significant bit -- bit by bit, beginning
+  from the least significant bit, for a total of `shift` bits.
 
 ## License
 
