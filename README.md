@@ -14,13 +14,13 @@ The only thing AT6P shares with its predecessors is a kind of similar header for
 |Offset (hex)|Size|Purpose|
 |-|-|-|
 |0|4|Magic (`41 54 36 50`)|
-|4|1|Flag byte. I don't know what it means and it's not essential to decompression.|
+|4|1|Not used (seems to always be a multiple of 8...?)|
 |5|2|Size of the compressed file, stored little-endian|
-|7|9|Zeroes (not used)|
+|7|9|Not used (often 00s, but not always??)|
 |10|3|Size of the decompressed file, stored little-endian|
-|13|1|Zero (not used)|
+|13|1|Not used (often 00)|
 |14|1|First byte of data|
-|15|1|Zero (not used)|
+|15|1|Not used (often 00, but not always??)|
 |16|...|Compressed data|
 
 The compressed data is a stream of bits, intended to be read in sequence from least significant to
