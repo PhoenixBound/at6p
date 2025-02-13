@@ -1,11 +1,8 @@
 # AT6P decompressor
 
-This tool implements a decompressor for AT6P-compressed files. This file format is apparently used
-in Chunsoft games for the DS, like *999: Nine Hours, Nine Persons, Nine Doors*.
-
-It doesn't support other formats very well (AT3P, AT4P, and AT5P), but in the meantime, there are
-already tools for those made by Pokemon Mystery Dungeon reverse engineers (pxutil). You should be
-able to find them [here](https://github.com/PsyCommando/ppmdu_2).
+This tool implements a decompressor for AT3P (mode N), AT4P, AT5P, and AT6P-compressed files. These
+file formats are apparently used in Chunsoft games for the DS, including
+*999: Nine Hours, Nine Persons, Nine Doors*.
 
 ## Format Overview
 
@@ -28,11 +25,12 @@ most significant in each byte. AT6P has two strategies for using these bits to d
 the next byte:
 
 * Encode the difference between this byte and the next byte using a relatively small number of bits
-* Recognize that the next byte is the same as the byte before this one
+* Recognize that the next byte is the same as the last byte that had a different value
 
-A backwards variant of exponential-Golomb coding (I don't know the technical names for these things)
-is used to store commands. Numbers closest to 0 use very few bits, while numbers further away from 0
-use progressively more bits. The decoding process works like this:
+A backwards variant of exponential-Golomb coding is used to store commands. (Exponential-Golomb
+coding is similar to Elias gamma coding, if that name is more familiar to you.) Numbers closest to 0
+use very few bits, while numbers further away from 0 use quadratically more bits as they increase in
+magnitude. The decoding process works like this:
 
 * Start with a `count` of 0.
 * Read a bit.
@@ -49,8 +47,8 @@ For simplicity for me, the following table will list bits in their
 
 |Bit pattern|Exponential-Golomb coding value|Command|
 |-|-|-|
-|1|0|Repeat the current byte (i.e., Add to this byte: +0)|
-|010|1|Use previous byte's value|
+|1|0|Repeat the current byte (special meaning; normally would decode to +0)|
+|010|1|Use previous byte's value (special meaning; normally would decode to -0)|
 |110|2|Add to this byte: +1|
 |00100|3|Add to this byte: -1|
 |01100|4|Add to this byte: +2|
@@ -90,9 +88,37 @@ Regarding the values of the "previous" and "current" byte, they're kept track of
 These procedures are not necessarily the most efficient ways to read the data, but they should yield
 the same results as the in-game decompression code in 999.
 
-Compression should be relatively simple, you just need to reverse the process. There's very little
-opportunity for creativity in this process. Wikipedia's page on Exponential-Golomb coding reveals a
-fairly simple method for encoding a non-negative number `d` into 999's format:
+There are some other interesting quirks to note about 999's specific implementation of the
+decompression algorithm:
+
+* The game does not check that the minimal representation of a delta is actually used, for most
+  standard commands. Only a delta of +0 ("repeat the current byte") or -0 ("use previous byte's
+  value") must be represented minimally; otherwise, they'll both be treated as literally outputting
+  a byte with the current byte's value plus (or minus) 0, making the current and previous bytes'
+  values the same.
+    * This fact seems pretty useless for compression. It takes up more space to encode a +0/-0 delta
+      that doesn't preserve the previous byte value, and it means that you'll have to encode the
+      previous byte value less efficiently later when it shows up. In return, you get a second way
+      to say "repeat the current byte" that *also* takes up more bits than necessary!
+    * If you use this fact to generate compressed files that cannot be correctly decompressed by
+      naïvely-implemented AT6P decompression tools, as a rudimentary copy protection mechanism for
+      your mod, I'll be really disappointed.
+    * If you use this fact to try and hack compressed files and minimize the diff of the compressed
+      file... well. I can't imagine that situation ever happening. Just decompress the file first
+      and *then* diff it and recompress. You're not trying to hack on an ancient console with no
+      filesystem, unlike the NSO devs editing compressed files directly in Ocarina of Time.
+* Passing a compression stream to the in-game decompression function whose length in bytes is odd
+  will cause undefined behavior to occur when reading the last few bits in the file, because the
+  game reads data from the compression stream 16 bits at a time. This undefined behavior is almost
+  certainly benign in all cases, but it's easy to prevent by just padding the file with an extra
+  `00` byte manually if its length is odd. There should be no *real* increase in file size or memory
+  usage after everything's been inserted back into the DS ROM and copied onto the heap.
+
+### AT6P compression
+
+Compression should be relatively simple, you just need to reverse the decompression process. There's
+very little opportunity for creativity in this process. Wikipedia's page on Exponential-Golomb
+coding reveals a fairly simple method for encoding a non-negative number `d` into 999's format:
 
 * Let `n` = `d` + 1
 * Let `shift` = floor(logbase(2, n))
@@ -101,6 +127,36 @@ fairly simple method for encoding a non-negative number `d` into 999's format:
   bits. This will output the appropriate number of 0s and a 1.
 * Output `n` mod `power` -- that is, `n` without its most significant bit -- bit by bit, beginning
   from the least significant bit, for a total of `shift` bits.
+
+The full algorithm to generate the compression stream might look like this, if you have a "write 1
+bit" primitive outputting bits from least significant to most significant:
+
+* Set `current` and `previous` to the first byte of the uncompressed file.
+* For each index `i` and byte `b` after the first byte, in order from beginning to end of the file:
+    * Let `delta` be `b` - `current`.
+    * Let `delta_signed` be `(delta + 128) mod 256 - 128`.
+    * Let `sign_bit` be 1 if `delta_signed` < 0; otherwise, let it be 0.
+    * Let `magnitude` be |`delta_signed`|.
+    * If `magnitude` = 0, set `word` to 1.
+    * Otherwise, if `b` = `previous`, set `word`' to 2.
+    * Otherwise, set `word` to `magnitude` × 2 + `sign_bit` + 1.
+    * If `word` ≠ 1, set `previous` to `b`.
+    * Let `shift` = floor(logbase(2, `word`)).
+    * Write the bits for `power` as described in the bullet point list above:
+        * Repeat `shift` - 1 times:
+            * Write the bit `0`.
+        * Write the bit `1`.
+    * Write the bits for `word` mod `power` as described in the bullet point list above:
+        * Repeat while `word` ≠ 1:
+            * Write the bit `word` mod 2.
+            * Set `word` to `word` div 2.
+* Repeat while the length (in bits) of the output is not a multiple of 16 (or 8, if benign undefined
+  behavior is acceptable):
+    * Write the bit `0`.
+
+This compression should give the optimal result, though it could probably stand to be better
+optimized with a "write N bits" primitive. The existing compression code I have uses a "write 1 bit"
+primitive, though.
 
 *Matching* the original compressed files is made more difficult by the inclusion of purposeless
 bytes in the header whose values are not properly zeroed out. I'm not aware of how they could be
@@ -202,7 +258,10 @@ that is, the size of the uncompressed data at offset 7). So it only really makes
 "N" mode with AT3P unless you happen to be able to guarantee that your source data file has the
 decompressed and compressed size's relevant bytes at the right positions.
 
-### The compression stream and the special LZ lengths
+Generally, if the mode of any of these compression formats is *not* intended to be `N`, it will be
+explicitly filled in with `X` instead. Any non-`N` value will work the same as `X`, however.
+
+### The PX compression stream and the special LZ lengths
 
 As mentioned earlier, the compressed data takes a format very similar to your average implementation
 of [LZSS](https://en.wikipedia.org/wiki/Lempel%E2%80%93Ziv%E2%80%93Storer%E2%80%93Szymanski). The
@@ -223,7 +282,8 @@ Full decoding code after interpreting the header can be implemented as follows:
 
 * Let `mask` = 0.
 * Repeat until all bytes in the compressed file have been read:
-    * Try to read the next compression token.
+    * Try to read the next compression token, if there's space in the destination buffer for more
+      bytes.
         * If `mask` = 0, read a byte from the compressed file. Let `flags` be this byte. Set `mask`
           equal to 128.
         * Let `bit` be "`flags` div `mask`." Set `flags`'s value to "`flags` mod `mask`."
@@ -273,11 +333,11 @@ Some things to note about the list of special nybbles:
 * Use of these can reduce two literal-byte tokens down to one one-byte token, at the cost of turning
   certain dictionary back-references into multiple back references in a row.
 
-### Compressing
+### AT3/4/5P compression
 
 One approach for compression is documented on
 [the Project Pokémon website](https://projectpokemon.org/docs/mystery-dungeon-nds/pmd2-px-compression-r45/).
-I didn't really internalize everything in that page, but I did read it at least once. My ideas may
+I didn't really internalize everything on that page, but I did read it at least once. My ideas may
 have been influenced a bit by it.
 
 I haven't written a compressor for this format yet, so take everything after this point as a brain
@@ -342,4 +402,19 @@ creativity in implementing the compression:
 
 ## License
 
-To the extent permissible by law, any software in this repository is licensed under the MIT license.
+Feel free to use the descriptions in this README to implement decompression and compression. I tried
+to keep them relatively detached from the actual implementation in-game where possible. Consider it
+to be available to you with a
+[CC0 1.0 Universal public domain dedication](https://creativecommons.org/publicdomain/zero/1.0/).
+
+The C code currently provided was derived from trying to provide a faithful re-creation of what the
+assembly code was doing, translating idiomatically. It is probably not a "matching decompilation"
+that can generate the same assembly code when the same compiler is used. No part of the output was
+copied from any automated decompilation tool (frankly, that would have made it harder). On the other
+hand, I've made a best effort to give variables good names and document non-obvious bits of control
+flow. I hope that the relatively small amount of code provided (two functions), and my creative
+input to choosing variable and function names and comments, makes the code in this repository
+qualify as "fair use" of Chunsoft's assembly code under US law, and copyrightable as well.
+
+Thus, to the extent permissible by law, any software in this repository is licensed under the MIT
+license.

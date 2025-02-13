@@ -35,20 +35,20 @@
 #include <stdlib.h>
 #include <string.h>
 
-bool decompress_at6p_data(uint8_t const *src /* r9 */, uint8_t *dest /* r10 */, int32_t decompressedSize /* sp0 */) {
-	uint8_t current = *src;          // r6
+bool decompress_at6p_data(uint8_t const *src, uint8_t *dest, int32_t decompressedSize) {
+	uint8_t current = *src;
 	src += 2;
-	int bitsAvailable = 0;           // r11
-	int bitsUsed = 0;                // r4
-	uint32_t flags = 0;              // r5
+	int bitsAvailable = 0;
+	int bitsUsed = 0;
+	uint32_t flags = 0;
 
-	int32_t i = 1;                   // r7
+	int32_t i = 1;
 	dest[0] = current;
-	uint8_t previous = current;      // r1
+	uint8_t previous = current;
 	if (decompressedSize <= 1) {
 		return true;
 	}
-	int delta;                       // r8
+	int delta;
 
 	for (; i < decompressedSize; ++i) {
 		bool emit = true;
@@ -204,15 +204,15 @@ void *decode_at_p_data(uint8_t const *src, uint32_t *out_size) {
         return NULL;
     }
 
-	const int xxxx_length = src[7] + 3;
-	const int xyyy_plus_length = src[8] + 3;
-	const int xyxx_minus_length = src[9] + 3;
-	const int xxyx_minus_length = src[0xA] + 3;
-	const int xxxy_minus_length = src[0xB] + 3;
-	const int xyyy_minus_length = src[0xC] + 3;
-	const int xyxx_plus_length = src[0xD] + 3;
-	const int xxyx_plus_length = src[0xE] + 3;
-	const int xxxy_plus_length = src[0xF] + 3;
+	int const xxxx_length = src[7] + 3;
+	int const xyyy_plus_length = src[8] + 3;
+	int const xyxx_minus_length = src[9] + 3;
+	int const xxyx_minus_length = src[0xA] + 3;
+	int const xxxy_minus_length = src[0xB] + 3;
+	int const xyyy_minus_length = src[0xC] + 3;
+	int const xyxx_plus_length = src[0xD] + 3;
+	int const xxyx_plus_length = src[0xE] + 3;
+	int const xxxy_plus_length = src[0xF] + 3;
 
 	for (; src_index < src_size; ++bit_index, flag_byte <<= 1) {
 		if (*out_size != 0 && dest_index >= *out_size) {
