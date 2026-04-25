@@ -12,13 +12,17 @@ The only thing AT6P shares with its predecessors is a kind of similar header for
 |-|-|-|
 |0|4|Magic (`41 54 36 50`)|
 |4|1|Not used (seems to always be a multiple of 8...?)|
-|5|2|Size of the compressed file, stored little-endian|
+|5|2|Least significant 16 bits of the compressed file's size, stored little-endian\*|
 |7|9|Not used (often 00s, but not always??)|
-|10|3|Size of the decompressed file, stored little-endian|
-|13|1|Not used (often 00)|
+|10|3|Size of the decompressed file, stored little-endian\*|
+|13|1|Most significant 8 bits of the compressed file's size\*|
 |14|1|First byte of data|
 |15|1|Not used (often 00, but not always??)|
 |16|...|Compressed data|
+
+\*Both the size of data before and after compression are restricted to a 24-bit range (< 16 MiB).
+Only the size of the decompressed file is checked by the in-game decompression code, to know when to
+stop writing bytes to the buffer.
 
 The compressed data is a stream of bits, intended to be read in sequence from least significant to
 most significant in each byte. AT6P has two strategies for using these bits to describe the value of
